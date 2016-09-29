@@ -34,11 +34,32 @@ var runSeeds = function (dynamodb, migration) {
                     }
                 };
             });
-        params = {
-            RequestItems: {}
-        };
-        params.RequestItems[migration.Table.TableName] = batchSeeds;
-        return new BbPromise(function (resolve, reject) {
+        
+        var promises = [];
+        
+        if (batchSeeds.length > 25) {
+            var currentPage = batchSeeds.slice(0, 25);
+            var offset = 0;
+            while (currentPage.length > 0) {
+                promises.push(batchWriteSeeds(dynamodb, migration, currentPage));
+                offset += 25;
+                currentPage = batchSeeds.slice(offset, offset + 25);
+            }
+            return BbPromise.all(promises);
+        }
+        else {
+            return batchWriteSeeds(dynamodb, migration, batchSeeds);
+        }
+    }
+};
+
+var batchWriteSeeds = function(dynamodb, migration, seeds) {
+    var params = {
+        RequestItems: {}
+    };
+    params.RequestItems[migration.Table.TableName] = seeds;
+
+    return new BbPromise(function (resolve, reject) {
             var interval = 0,
                 execute = function (interval) {
                     setTimeout(function () {
@@ -58,8 +79,7 @@ var runSeeds = function (dynamodb, migration) {
                 };
             execute(interval);
         });
-    }
-};
+}
 
 var create = function (migrationName, options) {
     return new BbPromise(function (resolve, reject) {
